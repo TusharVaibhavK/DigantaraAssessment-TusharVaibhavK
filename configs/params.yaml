@@ -46,4 +46,4 @@ export:
                             # measured mask->polygon->mask IoU: 4x = 0.963 (small stars 0.945), 8x = 1.000
   simplify_px: 0.1          # Douglas-Peucker tolerance in original pixels (drops collinear points, IoU unchanged)
   min_piece_px: 3           # a clipped piece smaller than this at a tile edge is dropped (a polygon needs area)
-  val_frames: [7030c2ac, CAM_B_20260815T154244]   # whole frames held out, so no object appears in both splits
+  test_frames: [7030c2ac, CAM_B_20260815T154244]  # whole frames held out, so no object appears in both splits

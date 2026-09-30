@@ -1,84 +1,88 @@
-# SSA star / streak annotation pipeline
+# Star and streak annotation for SSA images
 
-Semi-automatic pipeline that turns raw space-situational-awareness frames (FITS, 9568 x 6380, uint16)
-into pixel-level instance masks for two classes, **star (blob)** and **streak (satellite / debris)**,
-tiled to 1024 x 1024 and exported in **Ultralytics YOLO segmentation** format.
+This is my solution for the Digantara AI/ML Data Annotation Intern assessment.
 
-Built for the Digantara *AI/ML Data Annotation Intern* assessment. The written answers (Q2 a-d) are in the
-submitted PDF; this repository holds the code that produced every annotation and figure.
+It takes raw telescope frames (FITS, 9568 x 6380, 16-bit) and turns them into a labelled dataset
+for YOLO segmentation. Stars (blobs) are class 0 and satellites/debris (streaks) are class 1.
+Everything is done by the scripts, nothing is labelled by hand.
 
-## Results on the 10 assessment frames
+## How to run
+
+You need Python 3.12 (3.10+ should also work).
+
+1. Clone the repo and set up a virtual environment:
+
+   ```bash
+   git clone https://github.com/TusharVaibhavK/DigantraAssessment.git
+   cd DigantraAssessment
+   python -m venv .venv
+   .venv\Scripts\activate          # on Linux/Mac: source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+
+2. Put the 10 FITS files in a folder called `Datasets_Assessment/` inside the repo
+   (the data is not in the repo).
+
+3. Run the whole pipeline:
+
+   ```bash
+   python run_all.py
+   ```
+
+   It takes around 15 minutes and prints progress for every stage. Everything it makes goes
+   into `outputs/`. If you only want to redo part of it, use `python run_all.py --from classify`
+   (or any other stage name), and `--skip-injection` skips the last test.
+
+The YOLO dataset ends up in `outputs/yolo_dataset/` (images/train, images/test, labels/train,
+labels/test and data.yaml) and can be loaded straight into Ultralytics.
+
+## Approach
+
+1. **Look at the data first.** All 10 frames are the same size, but the noise is very different
+   between them (about 0.6 counts in the darkest ones, about 37 in the CAM_B ones). So nothing uses
+   fixed numbers - every threshold is "x times the noise" of that frame.
+2. **Clean each frame.** Remove the sky background, measure the noise, fix hot pixels (single pixels
+   that are sharper than any real star can be), and smooth with a blur the size of a star so faint
+   objects stand out.
+3. **Find and outline objects.** Anything at least 5 times above the noise is a detection, and its
+   mask is grown out to 3 times the noise to get the exact pixels.
+4. **Star or streak.** Stars barely move in a 0.2 s exposure, so they are round. An object is a
+   streak if it's clearly longer than the normal stars in that frame and evenly bright along its
+   length. Long objects with a dip in the middle are two stars touching, and get split.
+5. **Tile.** Each full frame is cut into 70 tiles of exactly 1024 x 1024. The last column and row
+   are moved back so they end on the image edge, so there's no padding and nothing is lost.
+   Annotation is done on the full frame before tiling, so objects on tile borders stay consistent.
+6. **Export and check.** Masks are saved as YOLO polygons. Then the full frames are rebuilt from the
+   tiles and label files to make sure they match the original, and fake stars/streaks are added
+   into real frames to measure how faint the pipeline can go.
+
+All the thresholds are in `configs/params.yaml`, each with a note on where the number came from.
+
+## Results
 
 | | |
 |---|---|
-| Tiles | 700 (70 per frame), all exactly 1024 x 1024, no padding |
-| Annotations | ~80,000 stars, 62 streaks (97,340 star + 77 streak polygons after tiling) |
-| Polygon fidelity | mask -> polygon -> mask IoU 0.9999 (stars), 1.000 (streaks) |
-| Repatch check | all 10 frames rebuilt from tiles + labels: exact size, pixel-identical, 0 uncovered px |
-| Star completeness | 50 % at peak = 2 sigma, 100 % from 3 sigma (injection test, all 3 intensity groups) |
-| Streak completeness | >= 90 % classified correctly from ridge = 1.5 sigma for streaks >= 30 px |
+| Tiles | 700 (70 per frame), all exactly 1024 x 1024 |
+| Split | 8 frames train (560 tiles), 2 frames test (140 tiles) |
+| Stars | about 80,500 (97,340 polygons after tiling) |
+| Streaks | 62, all checked by eye (77 polygons after tiling) |
+| Rebuild check | all 10 frames rebuilt from tiles + labels match the original exactly |
+| Faint stars | fake stars 3x brighter than the noise found 100% of the time, 2x about 50-78% |
+| Streaks | fake streaks 30 px or longer found and labelled right 90%+ of the time from 1.5x the noise |
 
-## Pipeline
+## What's in the code
 
-```
-FITS ──► inspect ──► pre-process ──► detect + segment ──► classify ──► tile + YOLO export ──► repatch ──► QA
-          stats      background,       matched filter,       star /        70 tiles/frame,       full-size   injection test,
-          previews   noise map,        hysteresis masks,     streak /      pixel-edge polygons   overlays    sanity checks
-                     hot pixels,       shape features        blend split
-                     PSF, stretch
-```
-
-| Stage | Script | Key idea |
-|---|---|---|
-| Inspect | `src/inspect_fits.py` | Three intensity regimes (median 1 / 1-3 / ~45 counts); MAD noise = 0 on 5 frames |
-| Pre-process | `src/preprocess.py` | Mesh background, sigma-clipped noise map, PSF-sharpness hot-pixel filter, matched filter, asinh display |
-| Detect | `src/detect.py` | Seed at 5 sigma, grow at 3 sigma (hysteresis) on the matched-filter SNR map; weighted moments |
-| Classify | `src/classify.py` | Elongation + length vs. the frame's own stars + evenness of the axial profile; watershed for blends |
-| Tile + export | `src/tiling.py`, `src/export_yolo.py` | Last row/column shifted inward (no padding); contours traced at 8x for pixel-edge polygons |
-| Repatch | `src/repatch.py` | Rebuilds full frames from the exported tiles + labels only (end-to-end check) |
-| QA | `src/qa_checks.py`, `src/validate_injection.py` | Counts, shape histograms, collinear-dot scan, synthetic source recovery |
-
-Every threshold lives in [`configs/params.yaml`](configs/params.yaml) with the measurement that justifies it.
-
-## Setup
-
-Python 3.12 (tested on Windows 11).
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate          # Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Place the 10 raw frames in `Datasets_Assessment/` (not part of the repository).
-
-## Run
-
-```bash
-python run_all.py                  # full pipeline, ~16 min, progress printed per stage
-python run_all.py --from classify  # resume from a stage
-python run_all.py --skip-injection # skip the ~1.5 min injection test
-python package_submission.py       # build the submission archives in outputs/submission/
-```
-
-## Outputs (`outputs/`)
-
-| Folder | Content |
+| File | What it does |
 |---|---|
-| `inspection/` | per-frame statistics, previews, histograms |
-| `processed/` | 8-bit display frames, pre-processing stats, raw vs processed figures |
-| `detections/`, `classified/` | label maps, per-object feature tables, review sheets |
-| `yolo_dataset/` | `images/`, `labels/` (train/val split by frame), `data.yaml`, `tiles.csv` |
-| `repatched/` | full-size overlays (stars blue, streaks red), class masks, previews, checks |
-| `qa/` | injection recall curve, counts, shape histograms, collinear-dot review |
+| `run_all.py` | runs every stage in order |
+| `src/inspect_fits.py` | stats and previews of the raw frames |
+| `src/preprocess.py` | background, noise, hot pixels, smoothing, display stretch |
+| `src/detect.py` | finds objects and makes the pixel masks |
+| `src/classify.py` | decides star or streak, splits touching stars |
+| `src/tiling.py`, `src/export_yolo.py` | 1024 x 1024 tiles and YOLO label files |
+| `src/repatch.py` | rebuilds the full frames from tiles + labels, with masks drawn on |
+| `src/qa_checks.py`, `src/validate_injection.py` | sanity checks and the fake star/streak test |
+| `configs/params.yaml` | all thresholds |
 
-## Main assumptions
-
-- All 10 files (8 UUID-named, 2 `CAM_B_*`) are in scope; the `CAM_B` frames are a different capture pipeline
-  (~40x higher background) and are handled by the same noise-normalised rules.
-- Stars are unresolved point sources. In a 0.2 s static exposure they trail ~1.5 px (measured elongation 1.10-1.16),
-  so any clearly elongated source is a moving object. Slow (e.g. GEO) objects look like stars in a single frame and
-  are labelled star.
-- The reference image and its annotation in the brief were used only for visual comparison, never as training data.
-- Objects are annotated on the full frame before tiling; an object crossing a tile edge is clipped, and pieces
-  smaller than 3 px are dropped.
+Optional: `app/app.py` is a small Streamlit app that runs the pipeline step by step on a crop so you
+can see what each step does (`pip install -r requirements-app.txt`, then `streamlit run app/app.py`).

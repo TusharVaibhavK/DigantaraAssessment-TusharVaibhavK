@@ -4,8 +4,8 @@ Annotation happens on the full frame first, tiling second, so an object crossing
 consistent mask and class; each tile just receives the clipped part of it.
 
 Output (outputs/yolo_dataset/):
-  images/{train,val}/<frame>_y<y0>_x<x0>.png   8-bit display tile
-  labels/{train,val}/<frame>_y<y0>_x<x0>.txt   one line per object: <class> x1 y1 x2 y2 ... (normalised)
+  images/{train,test}/<frame>_y<y0>_x<x0>.png   8-bit display tile
+  labels/{train,test}/<frame>_y<y0>_x<x0>.txt   one line per object: <class> x1 y1 x2 y2 ... (normalised)
   data.yaml                                    Ultralytics dataset file (0: star, 1: streak)
   tiles.csv                                    tile origins and per-class counts (used for repatching)
 """
@@ -90,14 +90,14 @@ def main():
     tile = cfg["tile_size"]
     for sub in ("images", "labels"):          # start clean so no stale tiles survive a re-run
         shutil.rmtree(DS_DIR / sub, ignore_errors=True)
-    for split in ("train", "val"):
+    for split in ("train", "test"):
         (DS_DIR / "images" / split).mkdir(parents=True, exist_ok=True)
         (DS_DIR / "labels" / split).mkdir(parents=True, exist_ok=True)
 
     all_rows = []
     for path in tqdm(list_frames(), desc="frames", unit="frame", file=sys.stdout):
         name = short_name(path)
-        split = "val" if any(name.startswith(v) for v in cfg["val_frames"]) else "train"
+        split = "test" if any(name.startswith(v) for v in cfg["test_frames"]) else "train"
         display = cv2.imread(str(PROC_DIR / f"{name}.png"), cv2.IMREAD_GRAYSCALE)
         instances = np.load(CLS_DIR / f"{name}_instances.npz")["labels"]
         objs = pd.read_csv(CLS_DIR / f"{name}_objects.csv")
@@ -111,7 +111,8 @@ def main():
     # no 'path' key: Ultralytics then resolves train/val relative to this file, so the folder is portable
     (DS_DIR / "data.yaml").write_text(yaml.safe_dump({
         "train": "images/train",
-        "val": "images/val",
+        "val": "images/test",          # Ultralytics validates on the held-out frames
+        "test": "images/test",
         "names": CLASS_NAMES,
     }, sort_keys=False))
     print(tiles.groupby("frame")[["stars", "streaks"]].sum().assign(tiles=tiles.groupby("frame").size()))

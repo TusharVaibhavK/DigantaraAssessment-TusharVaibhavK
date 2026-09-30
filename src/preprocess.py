@@ -75,7 +75,7 @@ def background_and_noise(img, p):
 def remove_hot_pixels(resid, sigma, p):
     """Remove pixels sharper than the optics allow.
 
-    With a PSF FWHM of ~3.6 px, the 3x3 median around a star's peak is ~0.7 of the peak.
+    With a PSF FWHM of ~3.6 px, the 3x3 median around a star's peak is ~0.8 of the peak.
     A hot/warm pixel or cosmic-ray hit stands far above its 3x3 median (> hot_pixel_sigma)
     while that median is below hot_sharp_ratio of the pixel. Such pixels are replaced by the
     local median. A 'bright pixel with all-dark neighbours' rule is not enough: warm pixels
@@ -122,7 +122,7 @@ def measure_psf(resid, sigma, raw, sat, p):
         fwhms.append(2.3548 * np.sqrt((l1 + l2) / 2))
         elongs.append(np.sqrt(l1 / l2))
     if not fwhms:
-        return 2.0, 1.0, 0  # fallback, flagged in the CSV by n=0
+        return 3.7, 1.0, 0  # fallback (typical measured FWHM), flagged in the CSV by n=0
     return float(np.median(fwhms)), float(np.median(elongs)), len(fwhms)
 
 

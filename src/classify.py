@@ -91,12 +91,15 @@ def split_blend(smooth, mask, noise, min_dist, seed_sigma):
 def star_reference(objs):
     """Median weighted length of bright, unsaturated, round stars in this frame."""
     ref = objs[(objs.peak_snr > 20) & (objs.peak_snr < 200) & (objs.elong_w < 1.5) & ~objs.saturated]
+    if len(ref) < 5:        # small crops only; every full frame has hundreds of reference stars
+        return 9.0          # typical value measured on the 10 frames (8.6-9.5 px)
     return float(ref.length_w.median())
 
 
-def classify_frame(raw, labels, objs, params, progress=None):
+def classify_frame(raw, labels, objs, params, progress=None, L_star=None):
+    """`L_star` can be supplied (e.g. the full-frame value when classifying a small crop)."""
     c = params["classify"]
-    L_star = star_reference(objs)
+    L_star = star_reference(objs) if L_star is None else L_star
     h, w = labels.shape
     objs = objs.copy()
     objs["edge"] = (objs.y0 == 0) | (objs.x0 == 0) | (objs.y1 == h) | (objs.x1 == w)
