@@ -1,0 +1,49 @@
+# All tunable numbers live here so the write-up can quote them and reruns stay reproducible.
+
+preprocess:
+  mesh_size: 128            # px, box size for the background / noise maps
+  mesh_filter: 3            # median filter (in boxes) applied to the mesh to reject boxes hit by bright stars
+  clip_sigma: 3.0           # sigma-clipping threshold used inside each box
+  clip_iters: 5
+  hot_pixel_sigma: 5.0      # a pixel this far above its 3x3 median ...
+  hot_sharp_ratio: 0.5      # ... while that median is < 0.5x the pixel is sharper than the PSF -> defect
+  psf_min_snr: 30           # stars used to measure the PSF must peak at least this high
+  psf_isolation_px: 15      # and have no brighter pixel within this radius
+  psf_box: 9                # px, window for the second-moment size measurement
+  display_soft: 1.0         # asinh softening (in sigma) for the 8-bit display image
+  display_top_sigma: 30     # SNR mapped to white (tuned so faint stars are visible, cf. brief Fig. 1)
+
+detect:
+  seed_sigma: 5.0           # matched-filter SNR a detection must reach somewhere (Gaussian false-alarm < 1 / frame)
+  grow_sigma: 3.0           # hysteresis low threshold that defines the mask extent (2.5 bridged neighbouring noise blobs)
+  min_area: 5               # px; smaller regions are residual noise spikes
+  link_enabled: false       # review showed real streaks are continuous; auto-linking only chained noise blobs
+  link_min_elong: 2.0       # only segments at least this elongated are candidates for streak linking
+  link_gap_px: 20           # max end-to-end gap between two pieces of one streak
+  link_perp_px: 4           # max perpendicular offset from the segment's axis
+  link_angle_deg: 15        # max orientation difference when both pieces are elongated
+  bridge_sigma: 1.0         # inside a merged streak's hull, pixels above this SNR fill the gaps
+
+classify:
+  streak_elong: 3.0         # > 99.9th percentile of star elongation at SNR >= 7 (measured on all frames)
+  streak_len_factor: 2.5    # streak length >= 2.5 x median star length in the same frame
+  short_elong: 2.0          # short/fat streaks: elongation above the ~98th star percentile ...
+  short_len_factor: 1.8     # ... length clearly above a star's ...
+  short_min_snr: 10         # ... and bright enough that the shape measurement is reliable
+                            # (15 recovered only ~15% of injected 15 px streaks; 10 tested in QA)
+  min_evenness: 0.50        # p10/p90 of the axial profile; below -> dip in the middle -> blended stars
+                            # (review: real long streaks 0.50-0.87, star pairs 0.30-0.47)
+  short_min_evenness: 0.65  # stricter for short objects: PSF smoothing partly fills a blend's dip
+                            # (review: real short streaks 0.66-0.91, figure-8 star pairs 0.30-0.58)
+  profile_trim_px: 4        # ignore ~1 FWHM at each end, where every profile tapers
+  psf_sigma_px: 1.53        # measured PSF FWHM 3.6 px / 2.355 (identical on all frames)
+  blend_min_dist_px: 4      # ~1 FWHM between two stars of a blend
+  blend_seed_sigma: 5.0     # a blend component must be a >= 5 sigma peak itself
+
+export:
+  tile_size: 1024
+  upsample: 8               # trace contours on an 8x mask so polygons follow pixel edges (error <= 1/16 px)
+                            # measured mask->polygon->mask IoU: 4x = 0.963 (small stars 0.945), 8x = 1.000
+  simplify_px: 0.1          # Douglas-Peucker tolerance in original pixels (drops collinear points, IoU unchanged)
+  min_piece_px: 3           # a clipped piece smaller than this at a tile edge is dropped (a polygon needs area)
+  val_frames: [7030c2ac, CAM_B_20260815T154244]   # whole frames held out, so no object appears in both splits

@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Raw data and confidential assessment brief stay out of the repo
+Datasets_Assessment/
+*.fits
+*.pdf
+
+# Generated outputs
+outputs/
