@@ -13,8 +13,8 @@ You need Python 3.12 (3.10+ should also work).
 1. Clone the repo and set up a virtual environment:
 
    ```bash
-   git clone https://github.com/TusharVaibhavK/DigantraAssessment-TusharVaibhavK.git
-   cd DigantraAssessment-TusharVaibhavK
+   git clone https://github.com/TusharVaibhavK/DigantaraAssessment-TusharVaibhavK.git
+   cd DigantaraAssessment-TusharVaibhavK
    python -m venv .venv
    .venv\Scripts\activate          # on Linux/Mac: source .venv/bin/activate
    pip install -r requirements.txt
